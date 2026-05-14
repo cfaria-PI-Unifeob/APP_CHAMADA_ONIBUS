@@ -1,0 +1,17 @@
+# Blueprint Render: conecte o repositório e crie o banco Neon; copie DATABASE_URL nas env vars do serviço.
+services:
+  - type: web
+    name: api-chamada-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: CORS_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
