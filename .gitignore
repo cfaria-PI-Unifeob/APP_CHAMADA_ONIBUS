@@ -4,3 +4,7 @@ frontend/build/
 frontend/.flutter-plugins-dependencies
 *.log
 .DS_Store
+
+# Segredos (Neon, OpenAI, etc.) — nunca commitar
+.env
+**/.env
