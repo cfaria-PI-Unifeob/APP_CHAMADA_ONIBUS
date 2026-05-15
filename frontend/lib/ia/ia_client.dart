@@ -17,7 +17,7 @@ Future<String> iaChat({
   required List<Map<String, String>> messages,
   String? context,
 }) async {
-  final uri = Uri.parse('${apiBaseUrl()}/api/ia/chat');
+  final uri = Uri.parse('${iaApiBaseUrl()}/api/ia/chat');
   final res = await http.post(
     uri,
     headers: {'Content-Type': 'application/json; charset=utf-8'},
