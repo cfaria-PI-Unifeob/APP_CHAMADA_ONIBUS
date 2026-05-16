@@ -192,7 +192,7 @@ app.post("/api/ia/chat", async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   const modelName =
-  process.env.GEMINI_MODEL || "gemini-pro";
+  process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
   /**
    * MODO MOCK
