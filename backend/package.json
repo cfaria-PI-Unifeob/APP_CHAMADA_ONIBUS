@@ -9,9 +9,9 @@
     "dev": "node --watch src/index.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "openai": "^6.38.0",
     "pg": "^8.13.1"
   },
   "engines": {

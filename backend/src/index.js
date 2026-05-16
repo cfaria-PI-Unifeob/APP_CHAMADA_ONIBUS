@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
 import {
   initDb,
@@ -189,23 +189,19 @@ app.post("/api/ia/chat", async (req, res) => {
     .filter(Boolean)
     .join("\n\n");
 
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = process.env.GROQ_API_KEY?.trim();
 
   const modelName =
-  process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
-  /**
-   * MODO MOCK
-   */
   if (!apiKey) {
     const last =
-      safeMessages[safeMessages.length - 1]
-        ?.content ?? "";
+      safeMessages[safeMessages.length - 1]?.content ?? "";
 
     return res.json({
       reply:
-        "[Sem GEMINI_API_KEY no servidor] " +
-        "Defina GEMINI_API_KEY no Render (Google AI Studio) para ativar IA real.\n\n" +
+        "[Sem GROQ_API_KEY no servidor] " +
+        "Defina GROQ_API_KEY no Render para ativar IA real.\n\n" +
         "Mensagem recebida:\n" +
         last.slice(0, 500),
       mock: true,
@@ -213,55 +209,29 @@ app.post("/api/ia/chat", async (req, res) => {
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-
-    const geminiModel = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: system,
+    const client = new OpenAI({
+      apiKey,
+      baseURL: "https://api.groq.com/openai/v1",
     });
 
-    const history = safeMessages
-      .slice(0, -1)
-      .map((m) => ({
-        role:
-          m.role === "assistant"
-            ? "model"
-            : "user",
-        parts: [
-          {
-            text: m.content,
-          },
-        ],
-      }));
+    const completion = await client.chat.completions.create({
+      model: modelName,
+      messages: [
+        { role: "system", content: system },
+        ...safeMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      ],
+      temperature: 0.7,
+      max_tokens: 1024,
+    });
 
-    const last = safeMessages[safeMessages.length - 1];
-
-    let result;
-
-    if (last && last.role === "user") {
-      const chat = geminiModel.startChat({
-        history,
-      });
-
-      result = await chat.sendMessage(last.content);
-    } else {
-      const bloco = safeMessages
-        .map(
-          (m) =>
-            `${m.role}: ${m.content}`,
-        )
-        .join("\n\n");
-
-      result = await geminiModel.generateContent(
-        `Continue conforme o contexto.\n\n${bloco}`,
-      );
-    }
-
-    const reply = result.response.text();
+    const reply = completion.choices?.[0]?.message?.content;
 
     if (!reply) {
       return res.status(502).json({
-        error: "resposta vazia do modelo",
+        error: "resposta vazia da IA",
       });
     }
 
