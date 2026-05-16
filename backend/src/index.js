@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import {
   initDb,
@@ -188,10 +189,10 @@ app.post("/api/ia/chat", async (req, res) => {
     .filter(Boolean)
     .join("\n\n");
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-  const model =
-    process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const modelName =
+    process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
   /**
    * MODO MOCK
@@ -203,8 +204,8 @@ app.post("/api/ia/chat", async (req, res) => {
 
     return res.json({
       reply:
-        "[Sem OPENAI_API_KEY no servidor] " +
-        "Defina OPENAI_API_KEY no Render para ativar IA real.\n\n" +
+        "[Sem GEMINI_API_KEY no servidor] " +
+        "Defina GEMINI_API_KEY no Render (Google AI Studio) para ativar IA real.\n\n" +
         "Mensagem recebida:\n" +
         last.slice(0, 500),
       mock: true,
@@ -212,48 +213,51 @@ app.post("/api/ia/chat", async (req, res) => {
   }
 
   try {
-    const r = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
+    const genAI = new GoogleGenerativeAI(apiKey);
 
-        headers: {
-          "Content-Type": "application/json",
+    const geminiModel = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: system,
+    });
 
-          Authorization: `Bearer ${apiKey}`,
-        },
+    const history = safeMessages
+      .slice(0, -1)
+      .map((m) => ({
+        role:
+          m.role === "assistant"
+            ? "model"
+            : "user",
+        parts: [
+          {
+            text: m.content,
+          },
+        ],
+      }));
 
-        body: JSON.stringify({
-          model,
+    const last = safeMessages[safeMessages.length - 1];
 
-          messages: [
-            {
-              role: "system",
-              content: system,
-            },
+    let result;
 
-            ...safeMessages,
-          ],
-
-          max_tokens: 1200,
-        }),
-      },
-    );
-
-    const data = await r.json();
-
-    if (!r.ok) {
-      const err =
-        data?.error?.message ??
-        JSON.stringify(data);
-
-      return res.status(502).json({
-        error: err,
+    if (last && last.role === "user") {
+      const chat = geminiModel.startChat({
+        history,
       });
+
+      result = await chat.sendMessage(last.content);
+    } else {
+      const bloco = safeMessages
+        .map(
+          (m) =>
+            `${m.role}: ${m.content}`,
+        )
+        .join("\n\n");
+
+      result = await geminiModel.generateContent(
+        `Continue conforme o contexto.\n\n${bloco}`,
+      );
     }
 
-    const reply =
-      data?.choices?.[0]?.message?.content ?? "";
+    const reply = result.response.text();
 
     if (!reply) {
       return res.status(502).json({
