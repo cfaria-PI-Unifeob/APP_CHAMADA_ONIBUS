@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../api_config.dart';
+import '../auth_service.dart';
 import '../perfil_usuario.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,8 +29,9 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     final base = apiBaseUrl();
     try {
+      final headers = AuthService.instance.authHeaders;
       final health = await http.get(Uri.parse('$base/health'));
-      final list = await http.get(Uri.parse('$base/api/chamadas'));
+      final list = await http.get(Uri.parse('$base/api/chamadas'), headers: headers);
       if (health.statusCode != 200 || list.statusCode != 200) {
         throw Exception('HTTP ${health.statusCode} / ${list.statusCode}');
       }
@@ -71,10 +73,21 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.only(right: 8),
             child: Center(
               child: Chip(
-                label: Text(_perfilLabel),
+                label: Text(
+                  AuthService.instance.session?.user.nome ?? _perfilLabel,
+                ),
                 visualDensity: VisualDensity.compact,
               ),
             ),
+          ),
+          IconButton(
+            tooltip: 'Sair',
+            onPressed: () async {
+              await AuthService.instance.logout();
+              if (!context.mounted) return;
+              Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+            },
+            icon: const Icon(Icons.logout),
           ),
           IconButton(
             tooltip: 'Atualizar',

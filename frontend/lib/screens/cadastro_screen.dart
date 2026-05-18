@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../auth_service.dart';
 import '../perfil_usuario.dart';
 
-/// Cadastro de aluno ou motorista (protótipo; persistência virá da API).
+/// Cadastro de aluno ou motorista na API.
 class CadastroScreen extends StatefulWidget {
   const CadastroScreen({super.key, this.perfilInicial = PerfilUsuario.aluno});
 
@@ -23,6 +24,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
   final _senhaConfirm = TextEditingController();
   bool _obscureSenha = true;
   bool _obscureSenhaConfirm = true;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -41,18 +43,36 @@ class _CadastroScreenState extends State<CadastroScreen> {
   String get _campoIdHint =>
       _perfil == PerfilUsuario.aluno ? 'Ex.: 2024001234' : 'Ex.: número da CNH';
 
-  void _cadastrar() {
+  Future<void> _cadastrar() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _perfil == PerfilUsuario.aluno
-              ? 'Cadastro de aluno registrado (protótipo). Faça login quando a API estiver pronta.'
-              : 'Cadastro de motorista registrado (protótipo). Faça login quando a API estiver pronta.',
-        ),
-      ),
-    );
-    Navigator.of(context).pop();
+
+    setState(() => _loading = true);
+    try {
+      await AuthService.instance.register(
+        perfil: _perfil,
+        identificador: _identificador.text,
+        senha: _senha.text,
+        nome: _nome.text,
+        email: _email.text,
+        telefone: _perfil == PerfilUsuario.motorista ? _telefone.text : null,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conta criada. Você já está logado.')),
+      );
+      final route = _perfil == PerfilUsuario.motorista ? '/motorista' : '/aluno';
+      Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro de conexão: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -214,13 +234,19 @@ class _CadastroScreenState extends State<CadastroScreen> {
                     ),
                     const SizedBox(height: 28),
                     FilledButton(
-                      onPressed: _cadastrar,
+                      onPressed: _loading ? null : _cadastrar,
                       style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                      child: const Text('Cadastrar'),
+                      child: _loading
+                          ? const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Cadastrar'),
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Os dados ainda não são enviados ao servidor neste protótipo.',
+                      'Os dados são salvos no servidor. Depois use a mesma senha no login.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                     ),

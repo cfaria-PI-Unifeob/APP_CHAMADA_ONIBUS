@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../auth_service.dart';
 import '../../ia/ia_chat_sheet.dart';
 import '../../ia/motorista_ia_context.dart';
 import '../../motorista_memoria.dart';
@@ -14,8 +15,10 @@ import 'motorista_remover_transporte_screen.dart';
 class MotoristaMenuScreen extends StatelessWidget {
   const MotoristaMenuScreen({super.key});
 
-  void _sair(BuildContext context) {
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+  Future<void> _sair(BuildContext context) async {
+    await AuthService.instance.logout();
+    if (!context.mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
   }
 
   @override

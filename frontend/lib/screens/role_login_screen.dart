@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../auth_service.dart';
 import '../ia/ia_chat_sheet.dart';
 import '../perfil_usuario.dart';
 import 'cadastro_screen.dart';
 
-/// Primeira tela: escolha Aluno ou Motorista e login (UI; auth real virá da API).
+/// Login com validação na API (matrícula/identificador + senha).
 class RoleLoginScreen extends StatefulWidget {
   const RoleLoginScreen({super.key});
 
@@ -18,6 +19,7 @@ class _RoleLoginScreenState extends State<RoleLoginScreen> {
   final _senhaController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscureSenha = true;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -26,12 +28,31 @@ class _RoleLoginScreenState extends State<RoleLoginScreen> {
     super.dispose();
   }
 
-  void _entrar() {
+  Future<void> _entrar() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_perfil == PerfilUsuario.motorista) {
-      Navigator.of(context).pushReplacementNamed('/motorista');
-    } else {
-      Navigator.of(context).pushReplacementNamed('/aluno');
+
+    setState(() => _loading = true);
+    try {
+      await AuthService.instance.login(
+        perfil: _perfil,
+        identificador: _idController.text,
+        senha: _senhaController.text,
+      );
+      if (!mounted) return;
+      final route = _perfil == PerfilUsuario.motorista ? '/motorista' : '/aluno';
+      Navigator.of(context).pushReplacementNamed(route);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro de conexão: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -124,9 +145,15 @@ class _RoleLoginScreenState extends State<RoleLoginScreen> {
                         ),
                         const SizedBox(height: 28),
                         FilledButton(
-                          onPressed: _entrar,
+                          onPressed: _loading ? null : _entrar,
                           style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                          child: const Text('Entrar'),
+                          child: _loading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Entrar'),
                         ),
                         const SizedBox(height: 20),
                         Text(
@@ -147,7 +174,7 @@ class _RoleLoginScreenState extends State<RoleLoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Login ainda é apenas da interface; a API não valida usuário neste protótipo.',
+                          'Use a matrícula ou identificador cadastrados. Senha incorreta não entra no app.',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                         ),
@@ -167,11 +194,11 @@ class _RoleLoginScreenState extends State<RoleLoginScreen> {
                     context,
                     title: 'Ajuda e suporte',
                     dataContext: '''
-App Chamada — tela de login (protótipo).
-- Perfil Aluno: use a matrícula no campo de identificação.
-- Perfil Motorista: use identificador ou CNH conforme orientação da instituição.
-- O botão Entrar só navega na interface; a validação real virá quando a API de autenticação estiver pronta.
-- Cadastro: há opção "Cadastrar aluno ou motorista" nesta tela.
+App Chamada — tela de login.
+- Perfil Aluno: matrícula + senha cadastradas.
+- Perfil Motorista: identificador/CNH + senha cadastradas.
+- Primeiro acesso: use "Cadastrar aluno ou motorista".
+- Credenciais inválidas são rejeitadas pela API.
 ''',
                     draftMessage: 'Sou novo no app. O que cada perfil faz e como acesso a lista de chamada?',
                   );
