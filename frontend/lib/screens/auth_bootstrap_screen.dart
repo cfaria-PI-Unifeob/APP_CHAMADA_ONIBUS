@@ -18,16 +18,21 @@ class _AuthBootstrapScreenState extends State<AuthBootstrapScreen> {
   }
 
   Future<void> _bootstrap() async {
-    final session = await AuthService.instance.restore();
-    if (!mounted) return;
+    try {
+      final session = await AuthService.instance.restore();
+      if (!mounted) return;
 
-    if (session != null) {
-      final route =
-          session.user.perfil == PerfilUsuario.motorista ? '/motorista' : '/aluno';
-      Navigator.of(context).pushReplacementNamed(route);
-      return;
+      if (session != null) {
+        final route =
+            session.user.perfil == PerfilUsuario.motorista ? '/motorista' : '/aluno';
+        Navigator.of(context).pushReplacementNamed(route);
+        return;
+      }
+    } catch (_) {
+      await AuthService.instance.logout();
     }
 
+    if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/login');
   }
 

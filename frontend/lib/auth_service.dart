@@ -62,6 +62,8 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+const _kRequestTimeout = Duration(seconds: 20);
+
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
@@ -69,6 +71,18 @@ class AuthService {
   AuthSession? _session;
 
   AuthSession? get session => _session;
+
+  /// Confirma se a API de login está acessível (health).
+  Future<bool> checkApiReachable() async {
+    try {
+      final res = await http
+          .get(Uri.parse('${apiBaseUrl()}/health'))
+          .timeout(_kRequestTimeout);
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Map<String, String> get authHeaders {
     final token = _session?.token;
@@ -81,22 +95,24 @@ class AuthService {
     required String identificador,
     required String senha,
   }) async {
-    final res = await http.post(
-      Uri.parse('${apiBaseUrl()}/api/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'perfil': perfil == PerfilUsuario.motorista ? 'motorista' : 'aluno',
-        'identificador': identificador.trim(),
-        'senha': senha,
-      }),
-    );
+    final res = await http
+        .post(
+          Uri.parse('${apiBaseUrl()}/api/auth/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'perfil': perfil == PerfilUsuario.motorista ? 'motorista' : 'aluno',
+            'identificador': identificador.trim(),
+            'senha': senha,
+          }),
+        )
+        .timeout(_kRequestTimeout);
 
     final body = _decodeBody(res);
     if (res.statusCode != 200) {
       throw AuthException(body['error']?.toString() ?? 'Falha no login (${res.statusCode})');
     }
 
-    return _saveSessionFromResponse(body);
+    return _saveAndValidateSession(body);
   }
 
   Future<AuthSession> register({
@@ -118,22 +134,29 @@ class AuthService {
       payload['telefone'] = telefone.trim();
     }
 
-    final res = await http.post(
-      Uri.parse('${apiBaseUrl()}/api/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
-    );
+    final res = await http
+        .post(
+          Uri.parse('${apiBaseUrl()}/api/auth/register'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(_kRequestTimeout);
 
     final body = _decodeBody(res);
     if (res.statusCode != 201) {
       throw AuthException(body['error']?.toString() ?? 'Falha no cadastro (${res.statusCode})');
     }
 
-    return _saveSessionFromResponse(body);
+    return _saveAndValidateSession(body);
   }
 
   Future<AuthSession?> restore() async {
-    if (_session != null) return _session;
+    if (_session != null) {
+      final valid = await _validateToken(_session!.token);
+      if (valid) return _session;
+      await logout();
+      return null;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_kTokenKey);
@@ -142,26 +165,36 @@ class AuthService {
 
     try {
       final userMap = jsonDecode(userJson) as Map<String, dynamic>;
-      _session = AuthSession(token: token, user: AuthUser.fromJson(userMap));
+      final user = AuthUser.fromJson(userMap);
+      final valid = await _validateToken(token);
+      if (!valid) {
+        await logout();
+        return null;
+      }
+      _session = AuthSession(token: token, user: user);
+      return _session;
     } catch (_) {
       await logout();
       return null;
     }
+  }
 
-    final res = await http.get(
-      Uri.parse('${apiBaseUrl()}/api/auth/me'),
-      headers: {
-        ...authHeaders,
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (res.statusCode != 200) {
-      await logout();
-      return null;
+  Future<bool> _validateToken(String token) async {
+    if (token.length < 20) return false;
+    try {
+      final res = await http
+          .get(
+            Uri.parse('${apiBaseUrl()}/api/auth/me'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(_kRequestTimeout);
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
     }
-
-    return _session;
   }
 
   Future<void> logout() async {
@@ -171,11 +204,16 @@ class AuthService {
     await prefs.remove(_kUserKey);
   }
 
-  Future<AuthSession> _saveSessionFromResponse(Map<String, dynamic> body) async {
+  Future<AuthSession> _saveAndValidateSession(Map<String, dynamic> body) async {
     final token = body['token']?.toString();
     final userJson = body['user'];
-    if (token == null || token.isEmpty || userJson is! Map) {
+    if (token == null || token.length < 20 || userJson is! Map) {
       throw AuthException('resposta inválida do servidor');
+    }
+
+    final valid = await _validateToken(token);
+    if (!valid) {
+      throw AuthException('servidor não confirmou o login. Verifique a API.');
     }
 
     final user = AuthUser.fromJson(Map<String, dynamic>.from(userJson));

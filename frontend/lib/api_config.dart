@@ -11,8 +11,9 @@ const String kApiProductionBase = 'https://app-chamada-onibus.onrender.com';
 ///
 /// **Web em localhost:** usa `API_BASE_URL` se definido, senão `http://localhost:3000`.
 ///
-/// **Mobile/desktop:** `API_BASE_URL` se definido; em **release** usa produção;
-/// em **debug**, Android emulador → `10.0.2.2`, demais → `localhost`.
+/// **Mobile/desktop em debug:** API local (emulador Android → `10.0.2.2:3000`).
+/// **Release:** produção no Render.
+/// Forçar produção em debug: `--dart-define=API_BASE_URL=https://app-chamada-onibus.onrender.com`
 String apiBaseUrl() {
   if (kIsWeb) {
     final host = Uri.base.host.toLowerCase();
@@ -35,14 +36,10 @@ String apiBaseUrl() {
   return 'http://localhost:3000';
 }
 
-/// Base URL para **somente** rotas de IA (`/api/ia/chat`).
-///
-/// Sempre usa [kApiProductionBase], para o chat funcionar mesmo em **debug**
-/// (Android/iOS/desktop chamar `localhost` quebraria a IA).
-///
-/// Dev local da IA: `flutter run ... --dart-define=IA_API_BASE_URL=http://localhost:3000`
+/// IA: mesma base da API em debug; produção em release.
 String iaApiBaseUrl() {
   const fromEnv = String.fromEnvironment('IA_API_BASE_URL');
   if (fromEnv.isNotEmpty) return fromEnv;
-  return kApiProductionBase;
+  if (kReleaseMode) return kApiProductionBase;
+  return apiBaseUrl();
 }

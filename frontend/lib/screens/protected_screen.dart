@@ -29,21 +29,27 @@ class _ProtectedScreenState extends State<ProtectedScreen> {
   }
 
   Future<void> _check() async {
-    final session = await AuthService.instance.restore();
-    if (!mounted) return;
+    try {
+      final session = await AuthService.instance.restore();
+      if (!mounted) return;
 
-    final ok = session != null && session.user.perfil == widget.requiredPerfil;
-    if (!ok) {
+      final ok = session != null && session.user.perfil == widget.requiredPerfil;
+      if (!ok) {
+        await AuthService.instance.logout();
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+        return;
+      }
+
+      setState(() {
+        _checking = false;
+        _allowed = true;
+      });
+    } catch (_) {
       await AuthService.instance.logout();
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
-      return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
     }
-
-    setState(() {
-      _checking = false;
-      _allowed = true;
-    });
   }
 
   @override

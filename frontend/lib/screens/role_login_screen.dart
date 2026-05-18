@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api_config.dart';
 import '../auth_service.dart';
 import '../ia/ia_chat_sheet.dart';
 import '../perfil_usuario.dart';
@@ -44,12 +45,18 @@ class _RoleLoginScreenState extends State<RoleLoginScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro de conexão: $e')),
+        SnackBar(
+          content: Text('Sem conexão com a API (${apiBaseUrl()}). Verifique internet.'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -174,9 +181,27 @@ class _RoleLoginScreenState extends State<RoleLoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Use a matrícula ou identificador cadastrados. Senha incorreta não entra no app.',
+                          'API: ${apiBaseUrl()}',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.outline),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Cadastre-se primeiro. Senha errada ou usuário inexistente não entra.',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                        TextButton(
+                          onPressed: _loading
+                              ? null
+                              : () async {
+                                  await AuthService.instance.logout();
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Sessão anterior removida.')),
+                                  );
+                                },
+                          child: const Text('Limpar sessão salva'),
                         ),
                       ],
                     ),
