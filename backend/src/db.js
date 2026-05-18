@@ -2,6 +2,10 @@ import pg from "pg";
 
 let pool = null;
 
+export function getPool() {
+  return pool;
+}
+
 export function isDbEnabled() {
   return Boolean(process.env.DATABASE_URL?.trim());
 }

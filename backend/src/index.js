@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 
+import { requireAuth, signToken } from "./auth.js";
 import {
   initDb,
   insertChamada,
@@ -9,6 +10,12 @@ import {
   listChamadas,
   pingDb,
 } from "./db.js";
+import {
+  authStorageHint,
+  initUsers,
+  loginUser,
+  registerUser,
+} from "./users.js";
 
 const app = express();
 
@@ -29,6 +36,7 @@ app.use(
 );
 
 await initDb();
+await initUsers();
 
 /**
  * ROTA PRINCIPAL
@@ -81,9 +89,94 @@ app.get("/health", async (_req, res) => {
 });
 
 /**
+ * AUTENTICAÇÃO
+ */
+app.post("/api/auth/register", async (req, res) => {
+  const body = req.body ?? {};
+  const perfil = body.perfil === "motorista" ? "motorista" : "aluno";
+
+  try {
+    const user = await registerUser({
+      perfil,
+      identificador: body.identificador,
+      senha: body.senha,
+      nome: body.nome,
+      email: body.email,
+      telefone: body.telefone,
+    });
+
+    const token = signToken({
+      sub: user.id,
+      perfil: user.perfil,
+      identificador: user.identificador,
+      nome: user.nome,
+    });
+
+    return res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        perfil: user.perfil,
+        identificador: user.identificador,
+        nome: user.nome,
+        email: user.email,
+        telefone: user.telefone,
+      },
+      storage: authStorageHint(),
+    });
+  } catch (e) {
+    const msg = String(e?.message ?? e);
+    const status =
+      msg.includes("já cadastrado") || msg.includes("inválid") ? 400 : 500;
+    return res.status(status).json({ error: msg });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const body = req.body ?? {};
+  const perfil = body.perfil === "motorista" ? "motorista" : "aluno";
+
+  try {
+    const user = await loginUser({
+      perfil,
+      identificador: body.identificador,
+      senha: body.senha,
+    });
+
+    const token = signToken({
+      sub: user.id,
+      perfil: user.perfil,
+      identificador: user.identificador,
+      nome: user.nome,
+    });
+
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        perfil: user.perfil,
+        identificador: user.identificador,
+        nome: user.nome,
+        email: user.email,
+        telefone: user.telefone,
+      },
+      storage: authStorageHint(),
+    });
+  } catch (e) {
+    const msg = String(e?.message ?? e);
+    const status = msg.includes("credenciais") ? 401 : 500;
+    return res.status(status).json({ error: msg });
+  }
+});
+
+app.get("/api/auth/me", requireAuth, (req, res) => {
+  res.json({ user: req.user });
+});
+
+/**
  * LISTAR CHAMADAS
  */
-app.get("/api/chamadas", async (_req, res) => {
+app.get("/api/chamadas", requireAuth, async (_req, res) => {
   try {
     if (isDbEnabled()) {
       const rows = await listChamadas();
@@ -106,7 +199,7 @@ app.get("/api/chamadas", async (_req, res) => {
 /**
  * CRIAR CHAMADA
  */
-app.post("/api/chamadas", async (req, res) => {
+app.post("/api/chamadas", requireAuth, async (req, res) => {
   const { turma, presentes } = req.body ?? {};
 
   if (!turma) {
